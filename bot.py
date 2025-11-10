@@ -27,7 +27,10 @@ ADMIN_CHAT_ID = 6673419838                   # твой chat_id для увед�
 # ========= GOOGLE SHEETS AUTH =========
 # На Render (и можно локально) ключ лежит в переменной окружения GOOGLE_CREDENTIALS_JSON
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
 # читаем JSON из переменной окружения
 creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
@@ -141,3 +144,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
