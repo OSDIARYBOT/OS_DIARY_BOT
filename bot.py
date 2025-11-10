@@ -1,4 +1,6 @@
 import logging
+import os
+import json
 from datetime import datetime
 
 from telegram import Update
@@ -16,21 +18,21 @@ from google.oauth2.service_account import Credentials
 
 # ========= CONFIG =========
 
-BOT_TOKEN = "8511615749:AAHsZ94HBr5KBYSkMNmFbKt1JT67ZRZWTRE"          # сюда токен бота из BotFather
-SPREADSHEET_NAME = "OS_DIARY_LOG"              # название таблицы (как на вкладке сверху слева)
-SHEET_NAME = "DIARY"                           # имя листа внутри таблицы
-JSON_KEY_FILE = "osdiarybot-c085486add49.json"         # точное имя JSON-файла сервиса (лежит рядом с bot.py)
-ADMIN_CHAT_ID = 6673419838                     # твой chat_id для уведомлений от бота
+BOT_TOKEN = "8511615749:AAHsZ94HBr5KBYSkMNmFbKt1JT67ZRZWTRE"   # сюда токен бота
+SPREADSHEET_NAME = "OS_DIARY_LOG"            # название таблицы
+SHEET_NAME = "DIARY"                         # имя листа в таблице
+ADMIN_CHAT_ID = 6673419838                   # твой chat_id для уведомлений от бота
 
 
 # ========= GOOGLE SHEETS AUTH =========
+# На Render (и можно локально) ключ лежит в переменной окружения GOOGLE_CREDENTIALS_JSON
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-creds = Credentials.from_service_account_file(JSON_KEY_FILE, scopes=SCOPES)
+# читаем JSON из переменной окружения
+creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
+creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+
 client = gspread.authorize(creds)
 sheet = client.open(SPREADSHEET_NAME).worksheet(SHEET_NAME)
 
@@ -45,7 +47,7 @@ logging.basicConfig(
 
 # ========= ADMIN MESSAGE FORMATTER =========
 
-def format_admin_message(user, text, ts: str) -> str:
+def format_admin_message(user, text: str, ts: str) -> str:
     """Формируем красивое уведомление админу."""
     first = (user.first_name or "").strip()
     last = (user.last_name or "").strip()
@@ -66,7 +68,9 @@ def format_admin_message(user, text, ts: str) -> str:
 # ========= HANDLERS =========
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("OS Diary готов принимать твои записи ✨")
+    await update.message.reply_text(
+        "OS Diary готов принимать твои записи ✨ Просто пиши сообщения."
+    )
 
 
 async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -84,7 +88,6 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user = message.from_user
-
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     full_name = (
@@ -92,13 +95,13 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ).strip()
 
     row = [
-        ts,                   # Дата/время
-        "OS_DIARY",           # Продукт
-        str(user.id),         # USER ID
-        user.username or "",  # Username
-        full_name,            # Имя
-        "text",               # Тип
-        text,                 # Текст/подпись/медиа
+        ts,                 # Дата/время
+        "OS_DIARY",         # Продукт
+        str(user.id),       # USER ID
+        user.username or "",# Username
+        full_name,          # Имя
+        "text",             # Тип
+        text,               # Текст/подпись/медиа
     ]
 
     # 1) Пишем в таблицу
@@ -121,7 +124,7 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # /start отдельным хендлером
+    # /start
     app.add_handler(CommandHandler("start", start))
 
     # все текстовые сообщения из лички
