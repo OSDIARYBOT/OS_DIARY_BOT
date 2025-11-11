@@ -17,23 +17,32 @@ from google.oauth2.service_account import Credentials
 
 # ========= CONFIG =========
 
-BOT_TOKEN = os.environ.get("8511615749:AAHsZ94HBr5KBYSkMNmFbKt1JT67ZRZWTRE", "")  # на Render берем из переменной окружения
-SPREADSHEET_NAME = "OS_DIARY_LOG"           # просто для себя, открыть будем по ID
-SHEET_NAME = "DIARY"
-SHEET_ID = "1VWwZLhlrIc36_jIG_yo9wp9O8mVQefNbdqsl35nYR30"  # твой ID таблицы
-ADMIN_CHAT_ID = 6673419838
+# Токен бота берём из переменной окружения BOT_TOKEN (Render -> Environment)
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN is not set")
+
+SPREADSHEET_NAME = "OS_DIARY_LOG"   # название таблицы
+SHEET_NAME = "DIARY"                # имя листа
+ADMIN_CHAT_ID = 6673419838          # твой chat_id
 
 # ========= GOOGLE SHEETS AUTH =========
+# JSON ключ лежит в переменной окружения GOOGLE_CREDENTIALS_JSON (строка целиком)
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
 
-creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
+creds_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+if not creds_json:
+    raise RuntimeError("GOOGLE_CREDENTIALS_JSON is not set")
+
+creds_info = json.loads(creds_json)
 creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+
 client = gspread.authorize(creds)
-sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
+sheet = client.open(SPREADSHEET_NAME).worksheet(SHEET_NAME)
 
 # ========= LOGGING =========
 
@@ -41,7 +50,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
-
 
 # ========= ADMIN MESSAGE FORMATTER =========
 
@@ -61,18 +69,19 @@ def format_admin_message(user, text: str, ts: str) -> str:
         f"{text}"
     )
 
-
 # ========= HANDLERS =========
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("OS Diary готов принимать твои записи ✨ Просто пиши сообщениями.")
-
+    await update.message.reply_text(
+        "OS Diary готов принимать твои записи ✨ Просто пиши сообщения."
+    )
 
 async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
     if not message:
         return
 
+    # игнорируем ботов
     if message.from_user and message.from_user.is_bot:
         return
 
@@ -94,30 +103,26 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.username or "",# Username
         full_name,          # Имя
         "text",             # Тип
-        text,               # Текст/подпись/медиа
+        text,               # Текст
     ]
 
-    # Пишем в таблицу
+    # 1) Запись в таблицу
     try:
         sheet.append_row(row)
         logging.info("LOGGED_ROW: %s", row)
     except Exception as e:
         logging.error("SHEET_ERROR: %s", e)
 
-    # Шлем админу
+    # 2) Уведомление админу
     try:
         admin_text = format_admin_message(user, text, ts)
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text)
     except Exception as e:
         logging.error("ADMIN_SEND_ERROR: %s", e)
 
-
 # ========= MAIN =========
 
 def main():
-    if not BOT_TOKEN:
-        raise RuntimeError("BOT_TOKEN is not set")
-
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -130,7 +135,6 @@ def main():
 
     logging.info("Bot started. Waiting for messages...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
