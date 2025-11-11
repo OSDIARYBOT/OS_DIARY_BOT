@@ -15,31 +15,25 @@ from telegram.ext import (
 import gspread
 from google.oauth2.service_account import Credentials
 
-
 # ========= CONFIG =========
 
-BOT_TOKEN = "8511615749:AAHsZ94HBr5KBYSkMNmFbKt1JT67ZRZWTRE"   # сюда токен бота
-SPREADSHEET_NAME = "OS_DIARY_LOG"            # название таблицы
-SHEET_NAME = "DIARY"                         # имя листа в таблице
-ADMIN_CHAT_ID = 6673419838                   # твой chat_id для уведомлений от бота
-
+BOT_TOKEN = os.environ.get("8511615749:AAHsZ94HBr5KBYSkMNmFbKt1JT67ZRZWTRE", "")  # на Render берем из переменной окружения
+SPREADSHEET_NAME = "OS_DIARY_LOG"           # просто для себя, открыть будем по ID
+SHEET_NAME = "DIARY"
+SHEET_ID = "1VWwZLhlrIc36_jIG_yo9wp9O8mVQefNbdqsl35nYR30"  # твой ID таблицы
+ADMIN_CHAT_ID = 6673419838
 
 # ========= GOOGLE SHEETS AUTH =========
-# На Render (и можно локально) ключ лежит в переменной окружения GOOGLE_CREDENTIALS_JSON
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
 
-# читаем JSON из переменной окружения
 creds_info = json.loads(os.environ["GOOGLE_CREDENTIALS_JSON"])
 creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-
 client = gspread.authorize(creds)
-ShEET_iD = "1VWwZLhlrIc36_jIG_yo9wp9O8mVQefNbdqsl35nYR30" 
-sheet = client.open(SPREADSHEET_NAME).worksheet(SHEET_NAME)
-
+sheet = client.open_by_key(SHEET_ID).worksheet(SHEET_NAME)
 
 # ========= LOGGING =========
 
@@ -52,7 +46,6 @@ logging.basicConfig(
 # ========= ADMIN MESSAGE FORMATTER =========
 
 def format_admin_message(user, text: str, ts: str) -> str:
-    """Формируем красивое уведомление админу."""
     first = (user.first_name or "").strip()
     last = (user.last_name or "").strip()
     name = (first + " " + last).strip() or "(без имени)"
@@ -72,9 +65,7 @@ def format_admin_message(user, text: str, ts: str) -> str:
 # ========= HANDLERS =========
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "OS Diary готов принимать твои записи ✨ Просто пиши сообщения."
-    )
+    await update.message.reply_text("OS Diary готов принимать твои записи ✨ Просто пиши сообщениями.")
 
 
 async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -82,11 +73,9 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message:
         return
 
-    # игнорируем ботов на всякий случай
     if message.from_user and message.from_user.is_bot:
         return
 
-    # берём только обычный текст
     text = (message.text or "").strip()
     if not text:
         return
@@ -108,14 +97,14 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text,               # Текст/подпись/медиа
     ]
 
-    # 1) Пишем в таблицу
+    # Пишем в таблицу
     try:
         sheet.append_row(row)
         logging.info("LOGGED_ROW: %s", row)
     except Exception as e:
         logging.error("SHEET_ERROR: %s", e)
 
-    # 2) Шлём админу
+    # Шлем админу
     try:
         admin_text = format_admin_message(user, text, ts)
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=admin_text)
@@ -126,12 +115,12 @@ async def save_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ========= MAIN =========
 
 def main():
+    if not BOT_TOKEN:
+        raise RuntimeError("BOT_TOKEN is not set")
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # /start
     app.add_handler(CommandHandler("start", start))
-
-    # все текстовые сообщения из лички
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & filters.TEXT & (~filters.COMMAND),
@@ -145,5 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
